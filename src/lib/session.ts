@@ -1,45 +1,45 @@
-import { getRequest } from "@tanstack/react-start/server";
-
-import { auth } from "./auth";
-import { type Role, getUserRole } from "./db";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { getRequestHeaders } from "@tanstack/react-start/server";
 
 /**
- * Read the current better-auth session from the incoming request.
- *
- * Must only be called from server code (server functions, API route handlers,
- * or TanStack Start loaders executed on the server) because it relies on
- * `getRequest()`.
+ * Mengambil session saat ini dengan meneruskan headers (cookie) dari browser.
  */
 export async function getCurrentSession() {
-	const request = getRequest();
-	const result = await auth.api.getSession({
-		headers: request.headers,
-	});
-	return {
-		session: result?.session ?? null,
-		user: result?.user ?? null,
-	};
+  // 1. Ambil headers (berisi cookie session) dari request yang masuk
+  const headers = getRequestHeaders();
+  
+  // 2. Teruskan ke Better Auth
+  const session = await auth.api.getSession({ headers });
+  
+  return session;
 }
 
+/**
+ * Memastikan user sudah login (Task C)
+ */
 export async function requireAuth() {
-	const { session, user } = await getCurrentSession();
-	if (!session || !user) {
-		const err = new Error("Unauthorized") as Error & { status?: number };
-		err.status = 401;
-		throw err;
-	}
-	return { session, user };
+  const session = await getCurrentSession();
+  if (!session) {
+    throw new Error("Unauthorized: login required");
+  }
+  return session;
 }
 
+/**
+ * Memastikan user adalah admin (Task C)
+ */
 export async function requireAdmin() {
-	const { user } = await requireAuth();
-	const role: Role = getUserRole(user.id);
-	if (role !== "admin") {
-		const err = new Error("Forbidden: admin required") as Error & {
-			status?: number;
-		};
-		err.status = 403;
-		throw err;
-	}
-	return { user };
+  // 1. Cek login dulu
+  const session = await requireAuth();
+  
+  // 2. Cek role di in-memory database
+  // (Menyesuaikan dengan struktur db di file seedAdmin yang kamu tunjukkan sebelumnya)
+  const userRole = db.userRole.find((r) => r.userId === session.user.id)?.role;
+
+  if (userRole !== "admin") {
+    throw new Error("Forbidden: admin required");
+  }
+  
+  return session;
 }
